@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { basename, type FileNode } from "../lib/fs";
+import { useEffect, useMemo, useState } from "react";
+import { basename, flattenFiles, type FileNode } from "../lib/fs";
 import { Search } from "./Search";
 import "./Sidebar.css";
 
@@ -20,9 +20,12 @@ interface SidebarProps {
   onSelectFile: (path: string) => void;
   onSelectFolder: (path: string) => void;
   onNewFile: () => void;
+  onNewLectureNote: () => void;
   onNewFolder: () => void;
   onDelete: (path: string, isDirectory: boolean) => void;
   onMoveEntry: (sourcePath: string, destDir: string) => void;
+  onRename: (path: string, isDirectory: boolean, newName: string) => void;
+  tagsByFile: Record<string, string[]>;
 }
 
 // True when `path` is `ancestor` itself or lives somewhere underneath it.
@@ -39,13 +42,28 @@ export function Sidebar({
   onSelectFile,
   onSelectFolder,
   onNewFile,
+  onNewLectureNote,
   onNewFolder,
   onDelete,
   onMoveEntry,
+  onRename,
+  tagsByFile,
 }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [draggedPath, setDraggedPath] = useState<string | null>(null);
   const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    Object.values(tagsByFile).forEach((tags) => tags.forEach((t) => set.add(t)));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [tagsByFile]);
+
+  const taggedFiles = useMemo(() => {
+    if (!activeTag) return [];
+    return flattenFiles(tree).filter((f) => tagsByFile[f.path]?.includes(activeTag));
+  }, [activeTag, tagsByFile, tree]);
 
   const canDropOn = (targetDir: string) => !!draggedPath && !isSameOrInside(targetDir, draggedPath);
 
@@ -117,13 +135,55 @@ export function Sidebar({
     }
   }
 
+  function handleRename() {
+    if (!contextMenu) return;
+    const { path, name, isDirectory } = contextMenu;
+    setContextMenu(null);
+    const newName = window.prompt(`Rename ${isDirectory ? "folder" : "file"}:`, name);
+    if (!newName || newName === name) return;
+    onRename(path, isDirectory, newName);
+  }
+
   return (
     <aside className="sidebar">
       <div className="sidebar-actions">
         <button type="button" onClick={onOpenFolder}>Open Folder…</button>
         <button type="button" onClick={onNewFile} disabled={!rootDir}>New File</button>
+        <button type="button" onClick={onNewLectureNote} disabled={!rootDir}>New Lecture Note</button>
         <button type="button" onClick={onNewFolder} disabled={!rootDir}>New Folder</button>
       </div>
+      {rootDir && allTags.length > 0 && (
+        <details className="tags-section">
+          <summary className="tags-summary">Tags</summary>
+          <div className="tag-pills">
+            {allTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                className={tag === activeTag ? "tag-pill active" : "tag-pill"}
+                onClick={() => setActiveTag((prev) => (prev === tag ? null : tag))}
+              >
+                #{tag}
+              </button>
+            ))}
+          </div>
+          {activeTag && (
+            <ul className="tag-file-list">
+              {taggedFiles.length === 0 ? (
+                <li className="tag-file-empty">No notes tagged #{activeTag}</li>
+              ) : (
+                taggedFiles.map((f) => (
+                  <li key={f.path}>
+                    <button type="button" className="tag-file-entry" onClick={() => onSelectFile(f.path)}>
+                      {f.name}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </details>
+      )}
       {rootDir ? (
         <Search tree={tree} activeFile={activeFile} onSelectFile={onSelectFile}>
           <div className="sidebar-tree">
@@ -170,6 +230,9 @@ export function Sidebar({
       )}
       {contextMenu && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
+          <button type="button" className="context-menu-item" onClick={handleRename}>
+            Rename {contextMenu.isDirectory ? "folder" : "file"}
+          </button>
           <button type="button" className="context-menu-item danger" onClick={handleDelete}>
             Delete {contextMenu.isDirectory ? "folder" : "file"}
           </button>

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { readNote, type FileNode } from "../lib/fs";
+import { readNote, flattenFiles, type FileNode } from "../lib/fs";
 import "./Search.css";
 
 interface SearchProps {
@@ -14,18 +14,6 @@ interface SearchResult {
   name: string;
   matchedName: boolean;
   snippet?: string;
-}
-
-function flattenFiles(nodes: FileNode[]): FileNode[] {
-  const files: FileNode[] = [];
-  for (const node of nodes) {
-    if (node.isDirectory) {
-      files.push(...flattenFiles(node.children ?? []));
-    } else {
-      files.push(node);
-    }
-  }
-  return files;
 }
 
 function makeSnippet(content: string, query: string): string {

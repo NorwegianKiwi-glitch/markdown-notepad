@@ -46,6 +46,79 @@
   color: var(--muted-text);
 }
 
+.tags-section {
+  border-bottom: 1px solid var(--border-color);
+  padding: 6px 8px;
+}
+
+.tags-summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 0;
+}
+
+.tag-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tag-pill {
+  font-size: 11px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.tag-pill:hover {
+  background: var(--hover-bg);
+}
+
+.tag-pill.active {
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.tag-file-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.tag-file-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--text-color);
+  font-size: 12px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tag-file-entry:hover {
+  background: var(--hover-bg);
+}
+
+.tag-file-empty {
+  font-size: 12px;
+  color: var(--muted-text);
+  padding: 3px 6px;
+}
+
 .sidebar-tree {
   flex: 1;
   overflow: auto;

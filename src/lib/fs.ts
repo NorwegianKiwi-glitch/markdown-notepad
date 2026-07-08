@@ -30,6 +30,23 @@ export function dirname(path: string): string {
   return idx === -1 ? path : path.slice(0, idx);
 }
 
+// Strips the trailing ".md" from a file name, for display as a note "title".
+export function noteTitle(name: string): string {
+  return name.replace(/\.md$/i, "");
+}
+
+export function flattenFiles(nodes: FileNode[]): FileNode[] {
+  const files: FileNode[] = [];
+  for (const node of nodes) {
+    if (node.isDirectory) {
+      files.push(...flattenFiles(node.children ?? []));
+    } else {
+      files.push(node);
+    }
+  }
+  return files;
+}
+
 export async function pickDirectory(): Promise<string | null> {
   const selected = await openDialog({ directory: true, multiple: false });
   return typeof selected === "string" ? selected : null;
@@ -77,8 +94,24 @@ export async function createNote(dirPath: string, fileName: string): Promise<str
   if (await exists(path)) {
     throw new Error(`"${name}" already exists`);
   }
-  const title = name.replace(/\.md$/i, "");
-  await writeTextFile(path, `# ${title}\n\n`);
+  await writeTextFile(path, `# ${noteTitle(name)}\n\n`);
+  return path;
+}
+
+// Creates a note pre-filled with a lecture-note template: a heading with the
+// topic and today's date, plus sections for the parts of a lecture worth capturing.
+export async function createLectureNote(dirPath: string, topic: string): Promise<string> {
+  const date = new Date().toISOString().slice(0, 10);
+  const safeTopic = topic.trim().replace(/[\\/:*?"<>|]/g, "-");
+  const fileName = safeTopic ? `${date} ${safeTopic}` : date;
+  const name = `${fileName}.md`;
+  const path = await join(dirPath, name);
+  if (await exists(path)) {
+    throw new Error(`"${name}" already exists`);
+  }
+  const heading = safeTopic ? `${safeTopic} — ${date}` : date;
+  const content = `# ${heading}\n\n## Topics Covered\n\n\n## Notes\n\n\n## Questions / Follow-ups\n\n`;
+  await writeTextFile(path, content);
   return path;
 }
 
@@ -104,10 +137,51 @@ export async function moveEntry(sourcePath: string, destDir: string): Promise<st
   return destPath;
 }
 
+// Renames a file/folder in place, keeping it in the same directory. Returns the new path.
+export async function renameEntry(path: string, newName: string, isDirectory: boolean): Promise<string> {
+  const name = !isDirectory && !newName.toLowerCase().endsWith(".md") ? `${newName}.md` : newName;
+  const destPath = await join(dirname(path), name);
+  if (destPath === path) return path;
+  if (await exists(destPath)) {
+    throw new Error(`"${name}" already exists`);
+  }
+  await rename(path, destPath);
+  return destPath;
+}
+
 // Moves the file/folder to the OS recycle bin (Windows) or trash (Linux)
 // via the custom `move_to_trash` Rust command, rather than deleting permanently.
 export async function deleteEntry(path: string): Promise<void> {
   await invoke("move_to_trash", { path });
+}
+
+const TAG_PATTERN = /#([a-zA-Z][\w-]*)/g;
+
+// Extracts #tag-style hashtags from a note's raw markdown. Requires a letter
+// right after the "#" so markdown headings ("# Heading") aren't picked up.
+export function extractTags(content: string): string[] {
+  const tags = new Set<string>();
+  for (const match of content.matchAll(TAG_PATTERN)) {
+    tags.add(match[1]);
+  }
+  return Array.from(tags);
+}
+
+// Reads every note under `nodes` once and builds a path -> tags map, used to
+// power the sidebar's tag filter.
+export async function buildTagIndex(nodes: FileNode[]): Promise<Record<string, string[]>> {
+  const files = flattenFiles(nodes);
+  const entries = await Promise.all(
+    files.map(async (file): Promise<[string, string[]]> => {
+      try {
+        const content = await readTextFile(file.path);
+        return [file.path, extractTags(content)];
+      } catch {
+        return [file.path, []];
+      }
+    }),
+  );
+  return Object.fromEntries(entries);
 }
 
 export async function saveImage(noteDir: string, file: File): Promise<string> {

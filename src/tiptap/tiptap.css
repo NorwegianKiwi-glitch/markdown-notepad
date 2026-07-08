@@ -198,6 +198,25 @@
   font-size: 12px;
 }
 
+.wiki-link {
+  display: inline;
+}
+.wiki-link-button {
+  display: inline;
+  border: none;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--code-bg);
+  color: var(--accent-bg);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.wiki-link-button:hover {
+  background: var(--hover-bg);
+  text-decoration: underline;
+}
+
 .spelling-error {
   text-decoration: underline wavy #e05252;
   text-decoration-skip-ink: none;

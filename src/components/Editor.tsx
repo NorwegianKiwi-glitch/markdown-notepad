@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent, type Editor as TiptapEditor } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
 import StarterKit from "@tiptap/starter-kit";
@@ -12,6 +12,7 @@ import { MathInline, MathBlock } from "../tiptap/nodes/MathNode";
 import { CodeBlockWithMermaid } from "../tiptap/nodes/MermaidNode";
 import { ImageWithNodeView } from "../tiptap/nodes/ImageNode";
 import { SlashCommand } from "../tiptap/slashCommand/SlashCommand";
+import { WikiLink } from "../tiptap/wikiLink/WikiLink";
 import { TableBubbleMenu } from "../tiptap/TableBubbleMenu";
 import { BlockSpacing } from "../tiptap/extensions/BlockSpacing";
 import { ImagePaste } from "../tiptap/extensions/ImagePaste";
@@ -24,6 +25,14 @@ interface EditorProps {
   value: string;
   onChange: (value: string) => void;
   noteDir: string | null;
+  noteNames: string[];
+  onNavigateToNote: (name: string) => void;
+}
+
+interface HeadingItem {
+  level: number;
+  text: string;
+  pos: number;
 }
 
 const markedInstance = createMarkedInstance();
@@ -32,10 +41,25 @@ function getMarkdown(editor: TiptapEditor): string {
   return (editor as unknown as { getMarkdown: () => string }).getMarkdown();
 }
 
-export function Editor({ value, onChange, noteDir }: EditorProps) {
+function getHeadings(editor: TiptapEditor): HeadingItem[] {
+  const headings: HeadingItem[] = [];
+  editor.state.doc.descendants((node, pos) => {
+    if (node.type.name === "heading") {
+      headings.push({ level: node.attrs.level as number, text: node.textContent, pos });
+    }
+  });
+  return headings;
+}
+
+export function Editor({ value, onChange, noteDir, noteNames, onNavigateToNote }: EditorProps) {
   const lastEmitted = useRef(value);
   const noteDirRef = useRef(noteDir);
   noteDirRef.current = noteDir;
+  const noteNamesRef = useRef(noteNames);
+  noteNamesRef.current = noteNames;
+  const onNavigateToNoteRef = useRef(onNavigateToNote);
+  onNavigateToNoteRef.current = onNavigateToNote;
+  const [headings, setHeadings] = useState<HeadingItem[]>([]);
 
   async function handleImagePaste(file: File, view: EditorView) {
     const dir = noteDirRef.current;
@@ -62,6 +86,10 @@ export function Editor({ value, onChange, noteDir }: EditorProps) {
       ImagePaste.configure({ onImagePaste: handleImagePaste }),
       Markdown.configure({ marked: markedInstance }),
       SlashCommand,
+      WikiLink.configure({
+        getNoteNames: () => noteNamesRef.current,
+        onNavigate: (target) => onNavigateToNoteRef.current(target),
+      }),
       BlockSpacing,
       SpellCheck,
     ],
@@ -76,23 +104,58 @@ export function Editor({ value, onChange, noteDir }: EditorProps) {
       const markdown = getMarkdown(editor);
       lastEmitted.current = markdown;
       onChange(markdown);
+      setHeadings(getHeadings(editor));
     },
   });
+
+  useEffect(() => {
+    if (!editor) return;
+    setHeadings(getHeadings(editor));
+  }, [editor]);
 
   useEffect(() => {
     if (!editor) return;
     if (value !== lastEmitted.current) {
       lastEmitted.current = value;
       editor.commands.setContent(value, { contentType: "markdown" });
+      setHeadings(getHeadings(editor));
     }
   }, [value, editor]);
+
+  function jumpToHeading(pos: number) {
+    if (!editor) return;
+    editor.commands.focus(pos);
+    const domNode = editor.view.domAtPos(pos).node;
+    const el = domNode.nodeType === 1 ? (domNode as HTMLElement) : domNode.parentElement;
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
     <div className="editor-pane">
       {editor && <TableBubbleMenu editor={editor} />}
-      <NoteDirProvider value={noteDir}>
-        <EditorContent editor={editor} className="editor-content" />
-      </NoteDirProvider>
+      <div className="editor-pane-body">
+        <NoteDirProvider value={noteDir}>
+          <EditorContent editor={editor} className="editor-content" />
+        </NoteDirProvider>
+        {headings.length > 0 && (
+          <aside className="outline-panel">
+            <div className="outline-title">Outline</div>
+            <ul className="outline-list">
+              {headings.map((h, i) => (
+                <li key={i}>
+                  <button
+                    type="button"
+                    className={`outline-item outline-level-${h.level}`}
+                    onClick={() => jumpToHeading(h.pos)}
+                  >
+                    {h.text || "Untitled"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
+      </div>
     </div>
   );
 }

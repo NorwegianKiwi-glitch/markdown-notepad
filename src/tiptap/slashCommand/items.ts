@@ -94,6 +94,12 @@ export const SLASH_COMMAND_ITEMS: SlashCommandItem[] = [
     },
   },
   {
+    title: "Link to note",
+    description: "Wiki-style [[link]] to another note",
+    keywords: ["link", "links", "wiki", "wikilink", "note", "backlink"],
+    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).insertContent("[[").run(),
+  },
+  {
     title: "Inline math",
     description: "Inline LaTeX formula",
     keywords: ["math", "latex", "formula", "inline"],

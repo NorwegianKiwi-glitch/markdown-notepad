@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
+import { QuickSwitcher } from "./components/QuickSwitcher";
 import {
   pickDirectory,
   pathExists,
@@ -9,13 +10,21 @@ import {
   writeNote,
   createNote,
   createFolder,
+  createLectureNote,
   deleteEntry,
   moveEntry,
+  renameEntry,
+  buildTagIndex,
+  extractTags,
+  flattenFiles,
   basename,
   dirname,
+  noteTitle,
   type FileNode,
 } from "./lib/fs";
 import "./App.css";
+
+const AUTOSAVE_DELAY_MS = 1500;
 
 const LAST_FOLDER_KEY = "lastOpenedFolder";
 const LAST_FILE_KEY = "lastOpenedFile";
@@ -32,8 +41,15 @@ function App() {
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [tagsByFile, setTagsByFile] = useState<Record<string, string[]>>({});
+  const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
 
   const isDirty = activeFile !== null && content !== savedContent;
+
+  const noteNames = useMemo(
+    () => Array.from(new Set(flattenFiles(tree).map((f) => noteTitle(f.name)))),
+    [tree],
+  );
 
   const activeFileRef = useRef(activeFile);
   const contentRef = useRef(content);
@@ -48,6 +64,7 @@ function App() {
     try {
       await writeNote(path, contentRef.current);
       setSavedContent(contentRef.current);
+      setTagsByFile((prev) => ({ ...prev, [path]: extractTags(contentRef.current) }));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
@@ -59,10 +76,22 @@ function App() {
         e.preventDefault();
         handleSave();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setQuickSwitcherOpen((prev) => !prev);
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
+
+  // Autosave: flush edits to disk shortly after typing stops, so lecture notes
+  // survive an abrupt window close without needing an explicit Ctrl+S.
+  useEffect(() => {
+    if (!isDirty) return;
+    const timeout = setTimeout(handleSave, AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [content, isDirty, handleSave]);
 
   const loadFolder = useCallback(async (dir: string) => {
     const nodes = await readMarkdownTree(dir);
@@ -74,6 +103,7 @@ function App() {
     setSavedContent("");
     setErrorMessage(null);
     localStorage.setItem(LAST_FOLDER_KEY, dir);
+    setTagsByFile(await buildTagIndex(nodes));
   }, []);
 
   const openFile = useCallback(async (path: string) => {
@@ -124,16 +154,21 @@ function App() {
   }
 
   async function handleSelectFile(path: string) {
-    if (isDirty) {
-      const proceed = window.confirm("You have unsaved changes. Discard them?");
-      if (!proceed) return;
-    }
+    if (isDirty) await handleSave();
     try {
       await openFile(path);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
   }
+
+  // Re-reads the tree and its tag index after a create/delete/move/rename.
+  const refreshTree = useCallback(async () => {
+    if (!rootDir) return;
+    const nodes = await readMarkdownTree(rootDir);
+    setTree(nodes);
+    setTagsByFile(await buildTagIndex(nodes));
+  }, [rootDir]);
 
   async function handleNewFile() {
     const targetDir = selectedFolder ?? rootDir;
@@ -142,8 +177,21 @@ function App() {
     if (!name) return;
     try {
       const path = await createNote(targetDir, name);
-      const nodes = await readMarkdownTree(rootDir);
-      setTree(nodes);
+      await refreshTree();
+      await handleSelectFile(path);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleNewLectureNote() {
+    const targetDir = selectedFolder ?? rootDir;
+    if (!rootDir || !targetDir) return;
+    const topic = window.prompt("Course or topic:");
+    if (topic === null) return;
+    try {
+      const path = await createLectureNote(targetDir, topic);
+      await refreshTree();
       await handleSelectFile(path);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
@@ -157,8 +205,7 @@ function App() {
     if (!name) return;
     try {
       const path = await createFolder(targetDir, name);
-      const nodes = await readMarkdownTree(rootDir);
-      setTree(nodes);
+      await refreshTree();
       setSelectedFolder(path);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
@@ -173,8 +220,7 @@ function App() {
     if (!rootDir) return;
     try {
       await deleteEntry(path);
-      const nodes = await readMarkdownTree(rootDir);
-      setTree(nodes);
+      await refreshTree();
       // Clear editor/selection state that pointed at (or inside) the deleted entry.
       const isUnder = (p: string) => p === path || p.startsWith(path + "\\") || p.startsWith(path + "/");
       if (activeFile && isUnder(activeFile)) {
@@ -200,8 +246,7 @@ function App() {
     try {
       const newPath = await moveEntry(sourcePath, destDir);
       if (newPath === sourcePath) return;
-      const nodes = await readMarkdownTree(rootDir);
-      setTree(nodes);
+      await refreshTree();
       // Re-point any state that referenced the old path (or something inside it).
       if (activeFile && isPathInside(activeFile, sourcePath)) {
         const updated = newPath + activeFile.slice(sourcePath.length);
@@ -211,6 +256,45 @@ function App() {
       if (selectedFolder && isPathInside(selectedFolder, sourcePath)) {
         setSelectedFolder(newPath + selectedFolder.slice(sourcePath.length));
       }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRename(path: string, isDirectory: boolean, newName: string) {
+    if (!rootDir) return;
+    try {
+      const newPath = await renameEntry(path, newName, isDirectory);
+      if (newPath === path) return;
+      await refreshTree();
+      // Re-point any state that referenced the old path (or something inside it).
+      if (activeFile && isPathInside(activeFile, path)) {
+        const updated = newPath + activeFile.slice(path.length);
+        setActiveFile(updated);
+        localStorage.setItem(LAST_FILE_KEY, updated);
+      }
+      if (selectedFolder && isPathInside(selectedFolder, path)) {
+        setSelectedFolder(newPath + selectedFolder.slice(path.length));
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  // Wiki-link navigation: jump to a note by title, or create it (next to the
+  // current note, or at the root) if no note with that title exists yet.
+  async function handleNavigateToNote(name: string) {
+    if (!rootDir) return;
+    const match = flattenFiles(tree).find((f) => noteTitle(f.name).toLowerCase() === name.toLowerCase());
+    if (match) {
+      await handleSelectFile(match.path);
+      return;
+    }
+    const targetDir = (activeFile && dirname(activeFile)) || rootDir;
+    try {
+      const path = await createNote(targetDir, name);
+      await refreshTree();
+      await handleSelectFile(path);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
@@ -227,9 +311,12 @@ function App() {
         onSelectFile={handleSelectFile}
         onSelectFolder={handleSelectFolder}
         onNewFile={handleNewFile}
+        onNewLectureNote={handleNewLectureNote}
         onNewFolder={handleNewFolder}
         onDelete={handleDelete}
         onMoveEntry={handleMoveEntry}
+        onRename={handleRename}
+        tagsByFile={tagsByFile}
       />
       <div className="workspace">
         <div className="workspace-header">
@@ -244,12 +331,29 @@ function App() {
         {errorMessage && <div className="error-banner">{errorMessage}</div>}
         <div className="panes">
           {activeFile ? (
-            <Editor value={content} onChange={setContent} noteDir={dirname(activeFile)} />
+            <Editor
+              value={content}
+              onChange={setContent}
+              noteDir={dirname(activeFile)}
+              noteNames={noteNames}
+              onNavigateToNote={handleNavigateToNote}
+            />
           ) : (
             <div className="empty-state">Open a folder and select a file to start writing.</div>
           )}
         </div>
       </div>
+      {quickSwitcherOpen && (
+        <QuickSwitcher
+          tree={tree}
+          rootDir={rootDir}
+          onSelectFile={(path) => {
+            setQuickSwitcherOpen(false);
+            handleSelectFile(path);
+          }}
+          onClose={() => setQuickSwitcherOpen(false)}
+        />
+      )}
     </div>
   );
 }

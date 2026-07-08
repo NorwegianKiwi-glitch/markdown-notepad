@@ -1,4 +1,5 @@
 import { marked, type TokenizerExtension, type RendererExtension } from "marked";
+import { wikiLinkExtension } from "./markedWikiLink";
 
 type MathToken = {
   type: "blockMath" | "inlineMath";
@@ -47,6 +48,6 @@ const inlineMathExtension: TokenizerExtension & RendererExtension = {
 };
 
 export function createMarkedInstance(): typeof marked {
-  marked.use({ extensions: [blockMathExtension, inlineMathExtension] });
+  marked.use({ extensions: [blockMathExtension, inlineMathExtension, wikiLinkExtension] });
   return marked;
 }

@@ -22,6 +22,12 @@ interface SidebarProps {
   onNewFile: () => void;
   onNewFolder: () => void;
   onDelete: (path: string, isDirectory: boolean) => void;
+  onMoveEntry: (sourcePath: string, destDir: string) => void;
+}
+
+// True when `path` is `ancestor` itself or lives somewhere underneath it.
+function isSameOrInside(path: string, ancestor: string): boolean {
+  return path === ancestor || path.startsWith(ancestor + "/") || path.startsWith(ancestor + "\\");
 }
 
 export function Sidebar({
@@ -35,8 +41,52 @@ export function Sidebar({
   onNewFile,
   onNewFolder,
   onDelete,
+  onMoveEntry,
 }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [draggedPath, setDraggedPath] = useState<string | null>(null);
+  const [dragOverPath, setDragOverPath] = useState<string | null>(null);
+
+  const canDropOn = (targetDir: string) => !!draggedPath && !isSameOrInside(targetDir, draggedPath);
+
+  function handleDragStart(event: React.DragEvent, path: string) {
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", path);
+    setDraggedPath(path);
+  }
+
+  function handleDragEnd() {
+    setDraggedPath(null);
+    setDragOverPath(null);
+  }
+
+  function handleDragEnter(event: React.DragEvent, targetDir: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (canDropOn(targetDir)) setDragOverPath(targetDir);
+  }
+
+  function handleDragOver(event: React.DragEvent, targetDir: string) {
+    if (!canDropOn(targetDir)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+  }
+
+  function handleDragLeave(event: React.DragEvent, targetDir: string) {
+    event.stopPropagation();
+    setDragOverPath((prev) => (prev === targetDir ? null : prev));
+  }
+
+  function handleDrop(event: React.DragEvent, targetDir: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    const path = draggedPath ?? event.dataTransfer.getData("text/plain");
+    setDraggedPath(null);
+    setDragOverPath(null);
+    if (path && canDropOn(targetDir)) onMoveEntry(path, targetDir);
+  }
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -79,8 +129,18 @@ export function Sidebar({
           <div className="sidebar-tree">
             <button
               type="button"
-              className={selectedFolder === rootDir ? "root-folder active" : "root-folder"}
+              className={[
+                "root-folder",
+                selectedFolder === rootDir && "active",
+                dragOverPath === rootDir && "drag-over",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               onClick={() => onSelectFolder(rootDir)}
+              onDragEnter={(e) => handleDragEnter(e, rootDir)}
+              onDragOver={(e) => handleDragOver(e, rootDir)}
+              onDragLeave={(e) => handleDragLeave(e, rootDir)}
+              onDrop={(e) => handleDrop(e, rootDir)}
               title={rootDir}
             >
               {basename(rootDir)}
@@ -92,6 +152,16 @@ export function Sidebar({
               onSelectFile={onSelectFile}
               onSelectFolder={onSelectFolder}
               onContextMenu={handleContextMenu}
+              dnd={{
+                draggedPath,
+                dragOverPath,
+                onDragStart: handleDragStart,
+                onDragEnd: handleDragEnd,
+                onDragEnter: handleDragEnter,
+                onDragOver: handleDragOver,
+                onDragLeave: handleDragLeave,
+                onDrop: handleDrop,
+              }}
             />
           </div>
         </Search>
@@ -109,6 +179,17 @@ export function Sidebar({
   );
 }
 
+interface DragHandlers {
+  draggedPath: string | null;
+  dragOverPath: string | null;
+  onDragStart: (event: React.DragEvent, path: string) => void;
+  onDragEnd: () => void;
+  onDragEnter: (event: React.DragEvent, targetDir: string) => void;
+  onDragOver: (event: React.DragEvent, targetDir: string) => void;
+  onDragLeave: (event: React.DragEvent, targetDir: string) => void;
+  onDrop: (event: React.DragEvent, targetDir: string) => void;
+}
+
 interface FileTreeProps {
   nodes: FileNode[];
   activeFile: string | null;
@@ -116,9 +197,10 @@ interface FileTreeProps {
   onSelectFile: (path: string) => void;
   onSelectFolder: (path: string) => void;
   onContextMenu: (event: React.MouseEvent, node: FileNode) => void;
+  dnd: DragHandlers;
 }
 
-function FileTree({ nodes, activeFile, selectedFolder, onSelectFile, onSelectFolder, onContextMenu }: FileTreeProps) {
+function FileTree({ nodes, activeFile, selectedFolder, onSelectFile, onSelectFolder, onContextMenu, dnd }: FileTreeProps) {
   return (
     <ul className="file-tree">
       {nodes.map((node) => (
@@ -126,9 +208,23 @@ function FileTree({ nodes, activeFile, selectedFolder, onSelectFile, onSelectFol
           {node.isDirectory ? (
             <details open>
               <summary
-                className={node.path === selectedFolder ? "folder-entry active" : "folder-entry"}
+                className={[
+                  "folder-entry",
+                  node.path === selectedFolder && "active",
+                  node.path === dnd.draggedPath && "dragging",
+                  node.path === dnd.dragOverPath && "drag-over",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                draggable
                 onClick={() => onSelectFolder(node.path)}
                 onContextMenu={(e) => onContextMenu(e, node)}
+                onDragStart={(e) => dnd.onDragStart(e, node.path)}
+                onDragEnd={dnd.onDragEnd}
+                onDragEnter={(e) => dnd.onDragEnter(e, node.path)}
+                onDragOver={(e) => dnd.onDragOver(e, node.path)}
+                onDragLeave={(e) => dnd.onDragLeave(e, node.path)}
+                onDrop={(e) => dnd.onDrop(e, node.path)}
               >
                 {node.name}
               </summary>
@@ -140,15 +236,25 @@ function FileTree({ nodes, activeFile, selectedFolder, onSelectFile, onSelectFol
                   onSelectFile={onSelectFile}
                   onSelectFolder={onSelectFolder}
                   onContextMenu={onContextMenu}
+                  dnd={dnd}
                 />
               )}
             </details>
           ) : (
             <button
               type="button"
-              className={node.path === activeFile ? "file-entry active" : "file-entry"}
+              className={[
+                "file-entry",
+                node.path === activeFile && "active",
+                node.path === dnd.draggedPath && "dragging",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              draggable
               onClick={() => onSelectFile(node.path)}
               onContextMenu={(e) => onContextMenu(e, node)}
+              onDragStart={(e) => dnd.onDragStart(e, node.path)}
+              onDragEnd={dnd.onDragEnd}
             >
               {node.name}
             </button>

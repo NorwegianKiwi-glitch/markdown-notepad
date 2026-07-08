@@ -10,6 +10,7 @@ import {
   createNote,
   createFolder,
   deleteEntry,
+  moveEntry,
   basename,
   dirname,
   type FileNode,
@@ -190,6 +191,31 @@ function App() {
     }
   }
 
+  async function handleMoveEntry(sourcePath: string, destDir: string) {
+    if (!rootDir) return;
+    if (isPathInside(destDir, sourcePath)) {
+      setErrorMessage("Can't move a folder into itself.");
+      return;
+    }
+    try {
+      const newPath = await moveEntry(sourcePath, destDir);
+      if (newPath === sourcePath) return;
+      const nodes = await readMarkdownTree(rootDir);
+      setTree(nodes);
+      // Re-point any state that referenced the old path (or something inside it).
+      if (activeFile && isPathInside(activeFile, sourcePath)) {
+        const updated = newPath + activeFile.slice(sourcePath.length);
+        setActiveFile(updated);
+        localStorage.setItem(LAST_FILE_KEY, updated);
+      }
+      if (selectedFolder && isPathInside(selectedFolder, sourcePath)) {
+        setSelectedFolder(newPath + selectedFolder.slice(sourcePath.length));
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -203,6 +229,7 @@ function App() {
         onNewFile={handleNewFile}
         onNewFolder={handleNewFolder}
         onDelete={handleDelete}
+        onMoveEntry={handleMoveEntry}
       />
       <div className="workspace">
         <div className="workspace-header">

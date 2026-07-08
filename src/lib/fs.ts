@@ -1,5 +1,5 @@
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { readTextFile, writeTextFile, writeFile, readDir, exists, mkdir } from "@tauri-apps/plugin-fs";
+import { readTextFile, writeTextFile, writeFile, readDir, exists, mkdir, rename } from "@tauri-apps/plugin-fs";
 import { join } from "@tauri-apps/api/path";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -89,6 +89,19 @@ export async function createFolder(parentDir: string, folderName: string): Promi
   }
   await mkdir(path);
   return path;
+}
+
+// Moves a file/folder into a different directory (e.g. dragged onto a folder in the tree),
+// keeping its original name. Returns the new path.
+export async function moveEntry(sourcePath: string, destDir: string): Promise<string> {
+  const name = basename(sourcePath);
+  const destPath = await join(destDir, name);
+  if (destPath === sourcePath) return sourcePath;
+  if (await exists(destPath)) {
+    throw new Error(`"${name}" already exists in the destination folder`);
+  }
+  await rename(sourcePath, destPath);
+  return destPath;
 }
 
 // Moves the file/folder to the OS recycle bin (Windows) or trash (Linux)

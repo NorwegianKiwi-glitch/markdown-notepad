@@ -101,6 +101,19 @@
   border-radius: 4px;
 }
 
+.file-entry.dragging,
+.folder-entry.dragging {
+  opacity: 0.5;
+}
+
+.root-folder.drag-over,
+.folder-entry.drag-over {
+  background: var(--hover-bg);
+  outline: 2px dashed var(--accent-bg);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
 .context-menu {
   position: fixed;
   z-index: 100;

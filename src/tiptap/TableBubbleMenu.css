@@ -1,0 +1,36 @@
+.table-bubble-menu {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+.table-bubble-menu button {
+  font-size: 12px;
+  white-space: nowrap;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-color);
+  cursor: pointer;
+}
+
+.table-bubble-menu button:hover {
+  background: var(--hover-bg);
+}
+
+.table-bubble-menu button.danger {
+  color: #e05252;
+}
+
+.table-bubble-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border-color);
+  margin: 0 2px;
+}

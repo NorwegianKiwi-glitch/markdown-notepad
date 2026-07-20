@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
+import { PlainTextEditor } from "./components/PlainTextEditor";
 import { QuickSwitcher } from "./components/QuickSwitcher";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { useResizableWidth } from "./hooks/useResizableWidth";
@@ -22,6 +23,7 @@ import {
   basename,
   dirname,
   noteTitle,
+  isPlainTextFile,
   type FileNode,
 } from "./lib/fs";
 import "./App.css";
@@ -351,13 +353,17 @@ function App() {
         {errorMessage && <div className="error-banner">{errorMessage}</div>}
         <div className="panes">
           {activeFile ? (
-            <Editor
-              value={content}
-              onChange={setContent}
-              noteDir={dirname(activeFile)}
-              noteNames={noteNames}
-              onNavigateToNote={handleNavigateToNote}
-            />
+            isPlainTextFile(activeFile) ? (
+              <PlainTextEditor value={content} onChange={setContent} />
+            ) : (
+              <Editor
+                value={content}
+                onChange={setContent}
+                noteDir={dirname(activeFile)}
+                noteNames={noteNames}
+                onNavigateToNote={handleNavigateToNote}
+              />
+            )
           ) : (
             <div className="empty-state">Open a folder and select a file to start writing.</div>
           )}

@@ -12,6 +12,21 @@ export interface FileNode {
 
 const IGNORED_DIRS = new Set([".git", "node_modules", ".obsidian", "assets"]);
 
+// File extensions that show up in the tree and can be opened/edited as notes.
+const NOTE_EXTENSIONS = [".md", ".txt"];
+const DEFAULT_NOTE_EXTENSION = ".md";
+
+// Returns the note extension (".md" / ".txt") a file name ends with, or null
+// if it doesn't end with one of the extensions this app treats as a note.
+function noteExtension(name: string): string | null {
+  const lower = name.toLowerCase();
+  return NOTE_EXTENSIONS.find((ext) => lower.endsWith(ext)) ?? null;
+}
+
+export function isPlainTextFile(path: string): boolean {
+  return noteExtension(path) === ".txt";
+}
+
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
   "image/jpeg": "jpg",
@@ -30,9 +45,11 @@ export function dirname(path: string): string {
   return idx === -1 ? path : path.slice(0, idx);
 }
 
-// Strips the trailing ".md" from a file name, for display as a note "title".
+// Strips the trailing note extension (".md" / ".txt") from a file name, for
+// display as a note "title".
 export function noteTitle(name: string): string {
-  return name.replace(/\.md$/i, "");
+  const ext = noteExtension(name);
+  return ext ? name.slice(0, -ext.length) : name;
 }
 
 export function flattenFiles(nodes: FileNode[]): FileNode[] {
@@ -69,7 +86,7 @@ export async function readMarkdownTree(dirPath: string): Promise<FileNode[]> {
     if (entry.isDirectory) {
       const children = await readMarkdownTree(entryPath);
       nodes.push({ name, path: entryPath, isDirectory: true, children });
-    } else if (name.toLowerCase().endsWith(".md")) {
+    } else if (noteExtension(name)) {
       nodes.push({ name, path: entryPath, isDirectory: false });
     }
   }
@@ -89,12 +106,14 @@ export async function writeNote(path: string, content: string): Promise<void> {
 }
 
 export async function createNote(dirPath: string, fileName: string): Promise<string> {
-  const name = fileName.toLowerCase().endsWith(".md") ? fileName : `${fileName}.md`;
+  const ext = noteExtension(fileName) ?? DEFAULT_NOTE_EXTENSION;
+  const name = noteExtension(fileName) ? fileName : `${fileName}${ext}`;
   const path = await join(dirPath, name);
   if (await exists(path)) {
     throw new Error(`"${name}" already exists`);
   }
-  await writeTextFile(path, `# ${noteTitle(name)}\n\n`);
+  const content = ext === ".txt" ? "" : `# ${noteTitle(name)}\n\n`;
+  await writeTextFile(path, content);
   return path;
 }
 
@@ -139,7 +158,11 @@ export async function moveEntry(sourcePath: string, destDir: string): Promise<st
 
 // Renames a file/folder in place, keeping it in the same directory. Returns the new path.
 export async function renameEntry(path: string, newName: string, isDirectory: boolean): Promise<string> {
-  const name = !isDirectory && !newName.toLowerCase().endsWith(".md") ? `${newName}.md` : newName;
+  let name = newName;
+  if (!isDirectory && !noteExtension(newName)) {
+    const currentExt = noteExtension(basename(path)) ?? DEFAULT_NOTE_EXTENSION;
+    name = `${newName}${currentExt}`;
+  }
   const destPath = await join(dirname(path), name);
   if (destPath === path) return path;
   if (await exists(destPath)) {

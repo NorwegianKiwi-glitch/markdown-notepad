@@ -1,14 +1,28 @@
 import { useEffect, useId, useState } from "react";
-import mermaid from "mermaid";
-
-mermaid.initialize({
-  startOnLoad: false,
-  securityLevel: "strict",
-  theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default",
-});
+import type { default as MermaidApi } from "mermaid";
 
 interface MermaidProps {
   chart: string;
+}
+
+// mermaid pulls in its full diagram-rendering engine (flowchart, sequence,
+// gantt, cytoscape-based diagrams, etc. — several MB once parsed). Loading it
+// only on first actual use keeps that weight out of every note that never
+// contains a mermaid block, instead of paying for it on every app start.
+let mermaidPromise: Promise<typeof MermaidApi> | null = null;
+
+function getMermaid(): Promise<typeof MermaidApi> {
+  if (!mermaidPromise) {
+    mermaidPromise = import("mermaid").then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: "strict",
+        theme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default",
+      });
+      return mermaid;
+    });
+  }
+  return mermaidPromise;
 }
 
 export function Mermaid({ chart }: MermaidProps) {
@@ -19,8 +33,8 @@ export function Mermaid({ chart }: MermaidProps) {
   useEffect(() => {
     let cancelled = false;
 
-    mermaid
-      .render(`mermaid-${id}`, chart)
+    getMermaid()
+      .then((mermaid) => mermaid.render(`mermaid-${id}`, chart))
       .then((result) => {
         if (!cancelled) {
           setSvg(result.svg);

@@ -48,6 +48,12 @@ body {
   overflow: hidden;
 }
 
+body.resizing-col,
+body.resizing-col * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .workspace {
   flex: 1;
   display: flex;

@@ -12,6 +12,7 @@ interface ContextMenuState {
 }
 
 interface SidebarProps {
+  width: number;
   rootDir: string | null;
   tree: FileNode[];
   activeFile: string | null;
@@ -34,6 +35,7 @@ function isSameOrInside(path: string, ancestor: string): boolean {
 }
 
 export function Sidebar({
+  width,
   rootDir,
   tree,
   activeFile,
@@ -145,7 +147,7 @@ export function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={{ width }}>
       <div className="sidebar-actions">
         <button type="button" onClick={onOpenFolder}>Open Folder…</button>
         <button type="button" onClick={onNewFile} disabled={!rootDir}>New File</button>

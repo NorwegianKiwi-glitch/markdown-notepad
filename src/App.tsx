@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { QuickSwitcher } from "./components/QuickSwitcher";
+import { ResizeHandle } from "./components/ResizeHandle";
+import { useResizableWidth } from "./hooks/useResizableWidth";
 import {
   pickDirectory,
   pathExists,
@@ -43,6 +45,14 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tagsByFile, setTagsByFile] = useState<Record<string, string[]>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+
+  const sidebarResize = useResizableWidth({
+    defaultWidth: 240,
+    minWidth: 180,
+    maxWidth: 480,
+    storageKey: "sidebarWidth",
+    side: "left",
+  });
 
   const isDirty = activeFile !== null && content !== savedContent;
 
@@ -302,21 +312,31 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Sidebar
-        rootDir={rootDir}
-        tree={tree}
-        activeFile={activeFile}
-        selectedFolder={selectedFolder}
-        onOpenFolder={handleOpenFolder}
-        onSelectFile={handleSelectFile}
-        onSelectFolder={handleSelectFolder}
-        onNewFile={handleNewFile}
-        onNewLectureNote={handleNewLectureNote}
-        onNewFolder={handleNewFolder}
-        onDelete={handleDelete}
-        onMoveEntry={handleMoveEntry}
-        onRename={handleRename}
-        tagsByFile={tagsByFile}
+      {!sidebarResize.collapsed && (
+        <Sidebar
+          width={sidebarResize.width}
+          rootDir={rootDir}
+          tree={tree}
+          activeFile={activeFile}
+          selectedFolder={selectedFolder}
+          onOpenFolder={handleOpenFolder}
+          onSelectFile={handleSelectFile}
+          onSelectFolder={handleSelectFolder}
+          onNewFile={handleNewFile}
+          onNewLectureNote={handleNewLectureNote}
+          onNewFolder={handleNewFolder}
+          onDelete={handleDelete}
+          onMoveEntry={handleMoveEntry}
+          onRename={handleRename}
+          tagsByFile={tagsByFile}
+        />
+      )}
+      <ResizeHandle
+        isResizing={sidebarResize.isResizing}
+        onPointerDown={sidebarResize.handlePointerDown}
+        collapsed={sidebarResize.collapsed}
+        onToggleCollapse={sidebarResize.toggleCollapsed}
+        side="left"
       />
       <div className="workspace">
         <div className="workspace-header">

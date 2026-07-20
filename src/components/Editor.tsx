@@ -18,6 +18,8 @@ import { BlockSpacing } from "../tiptap/extensions/BlockSpacing";
 import { ImagePaste } from "../tiptap/extensions/ImagePaste";
 import { SpellCheck } from "../tiptap/extensions/SpellCheck";
 import { NoteDirProvider } from "../tiptap/NoteDirContext";
+import { ResizeHandle } from "./ResizeHandle";
+import { useResizableWidth } from "../hooks/useResizableWidth";
 import "../tiptap/tiptap.css";
 import "./Editor.css";
 
@@ -60,6 +62,13 @@ export function Editor({ value, onChange, noteDir, noteNames, onNavigateToNote }
   const onNavigateToNoteRef = useRef(onNavigateToNote);
   onNavigateToNoteRef.current = onNavigateToNote;
   const [headings, setHeadings] = useState<HeadingItem[]>([]);
+  const outlineResize = useResizableWidth({
+    defaultWidth: 200,
+    minWidth: 160,
+    maxWidth: 480,
+    storageKey: "outlineWidth",
+    side: "right",
+  });
 
   async function handleImagePaste(file: File, view: EditorView) {
     const dir = noteDirRef.current;
@@ -138,22 +147,33 @@ export function Editor({ value, onChange, noteDir, noteNames, onNavigateToNote }
           <EditorContent editor={editor} className="editor-content" />
         </NoteDirProvider>
         {headings.length > 0 && (
-          <aside className="outline-panel">
-            <div className="outline-title">Outline</div>
-            <ul className="outline-list">
-              {headings.map((h, i) => (
-                <li key={i}>
-                  <button
-                    type="button"
-                    className={`outline-item outline-level-${h.level}`}
-                    onClick={() => jumpToHeading(h.pos)}
-                  >
-                    {h.text || "Untitled"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </aside>
+          <>
+            <ResizeHandle
+              isResizing={outlineResize.isResizing}
+              onPointerDown={outlineResize.handlePointerDown}
+              collapsed={outlineResize.collapsed}
+              onToggleCollapse={outlineResize.toggleCollapsed}
+              side="right"
+            />
+            {!outlineResize.collapsed && (
+              <aside className="outline-panel" style={{ width: outlineResize.width }}>
+                <div className="outline-title">Outline</div>
+                <ul className="outline-list">
+                  {headings.map((h, i) => (
+                    <li key={i}>
+                      <button
+                        type="button"
+                        className={`outline-item outline-level-${h.level}`}
+                        onClick={() => jumpToHeading(h.pos)}
+                      >
+                        {h.text || "Untitled"}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -26,3 +26,10 @@ tauri-plugin-fs = "2.5.1"
 tauri-plugin-dialog = "2.7.1"
 trash = "5.2.6"
 
+# Off by default so normal builds don't ship the inspector. Build with
+# `cargo tauri build -f devtools-debug` (or `dev -f devtools-debug`) to get
+# the WebKit Web Inspector for one-off memory investigation, then rebuild
+# without it before shipping.
+[features]
+devtools-debug = ["tauri/devtools"]
+

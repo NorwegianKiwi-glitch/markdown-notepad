@@ -32,6 +32,7 @@ const AUTOSAVE_DELAY_MS = 1500;
 
 const LAST_FOLDER_KEY = "lastOpenedFolder";
 const LAST_FILE_KEY = "lastOpenedFile";
+const SPELLCHECK_KEY = "spellcheckEnabled";
 
 function isPathInside(child: string, parent: string): boolean {
   return child === parent || child.startsWith(parent + "\\") || child.startsWith(parent + "/");
@@ -47,6 +48,20 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tagsByFile, setTagsByFile] = useState<Record<string, string[]>>({});
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  // Off by default: nspell has to parse ~6MB of English + Norwegian dictionary
+  // data into memory the first time it loads, so notes that don't need it
+  // shouldn't pay for it unasked.
+  const [spellcheckEnabled, setSpellcheckEnabled] = useState(
+    () => localStorage.getItem(SPELLCHECK_KEY) === "true",
+  );
+
+  function toggleSpellcheck() {
+    setSpellcheckEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem(SPELLCHECK_KEY, String(next));
+      return next;
+    });
+  }
 
   const sidebarResize = useResizableWidth({
     defaultWidth: 240,
@@ -346,9 +361,15 @@ function App() {
             {activeFile ? basename(activeFile) : "No file open"}
             {isDirty && <span className="dirty-dot" title="Unsaved changes" />}
           </span>
-          <button type="button" onClick={handleSave} disabled={!activeFile || !isDirty}>
-            Save
-          </button>
+          <div className="header-actions">
+            <label className="spellcheck-toggle">
+              <input type="checkbox" checked={spellcheckEnabled} onChange={toggleSpellcheck} />
+              Spellcheck
+            </label>
+            <button type="button" onClick={handleSave} disabled={!activeFile || !isDirty}>
+              Save
+            </button>
+          </div>
         </div>
         {errorMessage && <div className="error-banner">{errorMessage}</div>}
         <div className="panes">
@@ -357,11 +378,13 @@ function App() {
               <PlainTextEditor value={content} onChange={setContent} />
             ) : (
               <Editor
+                key={spellcheckEnabled ? "spellcheck-on" : "spellcheck-off"}
                 value={content}
                 onChange={setContent}
                 noteDir={dirname(activeFile)}
                 noteNames={noteNames}
                 onNavigateToNote={handleNavigateToNote}
+                spellcheckEnabled={spellcheckEnabled}
               />
             )
           ) : (

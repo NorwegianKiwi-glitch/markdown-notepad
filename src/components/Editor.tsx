@@ -29,6 +29,7 @@ interface EditorProps {
   noteDir: string | null;
   noteNames: string[];
   onNavigateToNote: (name: string) => void;
+  spellcheckEnabled: boolean;
 }
 
 interface HeadingItem {
@@ -53,7 +54,14 @@ function getHeadings(editor: TiptapEditor): HeadingItem[] {
   return headings;
 }
 
-export function Editor({ value, onChange, noteDir, noteNames, onNavigateToNote }: EditorProps) {
+export function Editor({
+  value,
+  onChange,
+  noteDir,
+  noteNames,
+  onNavigateToNote,
+  spellcheckEnabled,
+}: EditorProps) {
   const lastEmitted = useRef(value);
   const noteDirRef = useRef(noteDir);
   noteDirRef.current = noteDir;
@@ -100,7 +108,7 @@ export function Editor({ value, onChange, noteDir, noteNames, onNavigateToNote }
         onNavigate: (target) => onNavigateToNoteRef.current(target),
       }),
       BlockSpacing,
-      SpellCheck,
+      ...(spellcheckEnabled ? [SpellCheck] : []),
     ],
     content: value,
     contentType: "markdown",

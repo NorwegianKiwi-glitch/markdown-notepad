@@ -1,16 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import katex from "katex";
-import "katex/dist/katex.min.css";
 
 interface MathNodeViewProps extends NodeViewProps {
   display: "inline" | "block";
 }
 
+// katex is only needed once a note actually contains a formula, so it's
+// fetched on first render rather than bundled into every editor session.
+let katexPromise: Promise<typeof import("katex")["default"]> | null = null;
+
+function getKatex() {
+  if (!katexPromise) {
+    katexPromise = Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(
+      ([mod]) => mod.default,
+    );
+  }
+  return katexPromise;
+}
+
 export function MathNodeView({ node, updateAttributes, selected, display }: MathNodeViewProps) {
   const [editing, setEditing] = useState(false);
+  const [katex, setKatex] = useState<typeof import("katex")["default"] | null>(null);
   const formula = (node.attrs.formula as string) ?? "";
   const wrapperTag = display === "block" ? "div" : "span";
+
+  useEffect(() => {
+    let cancelled = false;
+    getKatex().then((mod) => {
+      if (!cancelled) setKatex(mod);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (editing) {
     return (
@@ -33,12 +55,16 @@ export function MathNodeView({ node, updateAttributes, selected, display }: Math
   }
 
   let html: string;
-  try {
-    html = formula
-      ? katex.renderToString(formula, { displayMode: display === "block", throwOnError: false })
-      : `<span class="math-placeholder">${display === "block" ? "Block" : "Inline"} formula</span>`;
-  } catch {
-    html = `<span class="math-placeholder">Invalid formula</span>`;
+  if (!katex) {
+    html = `<span class="math-placeholder">Loading…</span>`;
+  } else {
+    try {
+      html = formula
+        ? katex.renderToString(formula, { displayMode: display === "block", throwOnError: false })
+        : `<span class="math-placeholder">${display === "block" ? "Block" : "Inline"} formula</span>`;
+    } catch {
+      html = `<span class="math-placeholder">Invalid formula</span>`;
+    }
   }
 
   return (

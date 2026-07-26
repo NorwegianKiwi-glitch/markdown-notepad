@@ -86,6 +86,22 @@ body.resizing-col * {
   display: inline-block;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.spellcheck-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--muted-text);
+  cursor: pointer;
+  user-select: none;
+}
+
 .workspace-header button {
   font-size: 12px;
   padding: 5px 14px;

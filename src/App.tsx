@@ -43,6 +43,8 @@ function App() {
   const [tree, setTree] = useState<FileNode[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [backStack, setBackStack] = useState<string[]>([]);
+  const [forwardStack, setForwardStack] = useState<string[]>([]);
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -107,10 +109,35 @@ function App() {
         e.preventDefault();
         setQuickSwitcherOpen((prev) => !prev);
       }
+      // Alt+Left / Alt+Right mirror browser-style back/forward navigation.
+      if (e.altKey && e.key === "ArrowLeft") {
+        e.preventDefault();
+        goBack();
+      }
+      if (e.altKey && e.key === "ArrowRight") {
+        e.preventDefault();
+        goForward();
+      }
+    }
+    // Side buttons on mice/trackballs (typically "Back"/"Forward") report as
+    // MouseEvent.button 3/4. These fire as a normal "mouseup", no OS-level
+    // hook needed, at least on Windows/WebView2.
+    function handleMouseUp(e: MouseEvent) {
+      if (e.button === 3) {
+        e.preventDefault();
+        goBack();
+      } else if (e.button === 4) {
+        e.preventDefault();
+        goForward();
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSave]);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleSave, backStack, forwardStack, activeFile]);
 
   // Autosave: flush edits to disk shortly after typing stops, so lecture notes
   // survive an abrupt window close without needing an explicit Ctrl+S.
@@ -126,6 +153,8 @@ function App() {
     setTree(nodes);
     setSelectedFolder(dir);
     setActiveFile(null);
+    setBackStack([]);
+    setForwardStack([]);
     setContent("");
     setSavedContent("");
     setErrorMessage(null);
@@ -180,13 +209,34 @@ function App() {
     }
   }
 
-  async function handleSelectFile(path: string) {
+  async function handleSelectFile(path: string, options?: { recordHistory?: boolean }) {
+    const recordHistory = options?.recordHistory ?? true;
     if (isDirty) await handleSave();
+    if (recordHistory && activeFile && activeFile !== path) {
+      setBackStack((prev) => [...prev, activeFile]);
+      setForwardStack([]);
+    }
     try {
       await openFile(path);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
+  }
+
+  async function goBack() {
+    if (backStack.length === 0 || !activeFile) return;
+    const target = backStack[backStack.length - 1];
+    setBackStack(backStack.slice(0, -1));
+    setForwardStack([...forwardStack, activeFile]);
+    await handleSelectFile(target, { recordHistory: false });
+  }
+
+  async function goForward() {
+    if (forwardStack.length === 0 || !activeFile) return;
+    const target = forwardStack[forwardStack.length - 1];
+    setForwardStack(forwardStack.slice(0, -1));
+    setBackStack([...backStack, activeFile]);
+    await handleSelectFile(target, { recordHistory: false });
   }
 
   // Re-reads the tree and its tag index after a create/delete/move/rename.
@@ -259,6 +309,8 @@ function App() {
       if (selectedFolder && isUnder(selectedFolder)) {
         setSelectedFolder(rootDir);
       }
+      setBackStack((prev) => prev.filter((p) => !isUnder(p)));
+      setForwardStack((prev) => prev.filter((p) => !isUnder(p)));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
@@ -283,6 +335,9 @@ function App() {
       if (selectedFolder && isPathInside(selectedFolder, sourcePath)) {
         setSelectedFolder(newPath + selectedFolder.slice(sourcePath.length));
       }
+      const rewrite = (p: string) => (isPathInside(p, sourcePath) ? newPath + p.slice(sourcePath.length) : p);
+      setBackStack((prev) => prev.map(rewrite));
+      setForwardStack((prev) => prev.map(rewrite));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
@@ -303,6 +358,9 @@ function App() {
       if (selectedFolder && isPathInside(selectedFolder, path)) {
         setSelectedFolder(newPath + selectedFolder.slice(path.length));
       }
+      const rewrite = (p: string) => (isPathInside(p, path) ? newPath + p.slice(path.length) : p);
+      setBackStack((prev) => prev.map(rewrite));
+      setForwardStack((prev) => prev.map(rewrite));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : String(err));
     }
@@ -357,6 +415,28 @@ function App() {
       />
       <div className="workspace">
         <div className="workspace-header">
+          <div className="nav-buttons">
+            <button
+              type="button"
+              className="nav-button"
+              onClick={goBack}
+              disabled={backStack.length === 0}
+              title="Back (Alt+Left)"
+              aria-label="Back"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              className="nav-button"
+              onClick={goForward}
+              disabled={forwardStack.length === 0}
+              title="Forward (Alt+Right)"
+              aria-label="Forward"
+            >
+              →
+            </button>
+          </div>
           <span className="file-name">
             {activeFile ? basename(activeFile) : "No file open"}
             {isDirty && <span className="dirty-dot" title="Unsaved changes" />}

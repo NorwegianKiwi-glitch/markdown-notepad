@@ -70,6 +70,40 @@ body.resizing-col * {
   background: var(--panel-bg);
 }
 
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 4px;
+}
+
+.workspace-header .nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.workspace-header .nav-button:hover:not(:disabled) {
+  background: var(--accent-bg);
+  color: var(--accent-text);
+}
+
+.workspace-header .nav-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  background: transparent;
+}
+
 .file-name {
   display: flex;
   align-items: center;

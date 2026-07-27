@@ -1,0 +1,61 @@
+.template-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.template-picker {
+  width: 420px;
+  max-width: 90vw;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.template-picker-input {
+  padding: 12px 14px;
+  font-size: 14px;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  outline: none;
+}
+
+.template-picker-results {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.template-picker-empty {
+  padding: 10px;
+  font-size: 13px;
+  color: var(--muted-text);
+}
+
+.template-picker-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-color);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.template-picker-item.selected,
+.template-picker-item:hover {
+  background: var(--hover-bg);
+}

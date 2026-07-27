@@ -134,6 +134,70 @@ export async function createLectureNote(dirPath: string, topic: string): Promise
   return path;
 }
 
+const TEMPLATES_DIR_NAME = ".templates";
+
+export interface TemplateInfo {
+  name: string;
+  path: string;
+}
+
+const DEFAULT_TEMPLATE_CONTENT =
+  "Write your template below. Use {{title}} and {{date}} as placeholders — " +
+  "they'll be filled in when you create a note from this template.\n\n";
+
+// Templates live in a hidden `.templates` folder at the vault root, alongside
+// (but never mixed into) the regular note tree — readMarkdownTree already
+// skips dot-folders, so they never show up as notes, in search, or as
+// wiki-link targets.
+export async function listTemplates(rootDir: string): Promise<TemplateInfo[]> {
+  const dir = await join(rootDir, TEMPLATES_DIR_NAME);
+  if (!(await exists(dir))) return [];
+  const entries = await readDir(dir);
+  const templates: TemplateInfo[] = [];
+  for (const entry of entries) {
+    const name = entry.name ?? "";
+    if (!name || entry.isDirectory || !noteExtension(name)) continue;
+    templates.push({ name: noteTitle(name), path: await join(dir, name) });
+  }
+  return templates.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function createTemplate(rootDir: string, name: string): Promise<string> {
+  const dir = await join(rootDir, TEMPLATES_DIR_NAME);
+  if (!(await exists(dir))) {
+    await mkdir(dir);
+  }
+  const fileName = noteExtension(name) ? name : `${name}${DEFAULT_NOTE_EXTENSION}`;
+  const path = await join(dir, fileName);
+  if (await exists(path)) {
+    throw new Error(`A template named "${fileName}" already exists`);
+  }
+  await writeTextFile(path, DEFAULT_TEMPLATE_CONTENT);
+  return path;
+}
+
+// Fills in the placeholders a template can use: {{title}} becomes the new
+// note's title, {{date}} becomes today's date.
+export function applyTemplateTokens(content: string, title: string): string {
+  const date = new Date().toISOString().slice(0, 10);
+  return content.replace(/\{\{\s*title\s*\}\}/gi, title).replace(/\{\{\s*date\s*\}\}/gi, date);
+}
+
+export async function createNoteFromTemplate(
+  dirPath: string,
+  fileName: string,
+  templateContent: string,
+): Promise<string> {
+  const ext = noteExtension(fileName) ?? DEFAULT_NOTE_EXTENSION;
+  const name = noteExtension(fileName) ? fileName : `${fileName}${ext}`;
+  const path = await join(dirPath, name);
+  if (await exists(path)) {
+    throw new Error(`"${name}" already exists`);
+  }
+  await writeTextFile(path, applyTemplateTokens(templateContent, noteTitle(name)));
+  return path;
+}
+
 export async function createFolder(parentDir: string, folderName: string): Promise<string> {
   const path = await join(parentDir, folderName);
   if (await exists(path)) {

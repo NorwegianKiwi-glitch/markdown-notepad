@@ -15,6 +15,9 @@ notes.
 - Rename, delete (to the OS recycle bin/trash, never permanent), and drag-and-drop
   files/folders to reorganize
 - Remembers the last folder and note you had open across restarts
+- **Custom templates** — write your own reusable note templates (with `{{title}}` /
+  `{{date}}` placeholders) for meetings, journaling, or any other recurring occasion,
+  then spin up a new note from one whenever you need it
 
 **Writing**
 - Rich WYSIWYG markdown editor — what you type is stored as real markdown on disk
@@ -81,22 +84,37 @@ npm run tauri build
    you type, the same as any rich-text editor. Type `/` on its own to bring up the
    slash-command menu for inserting headings, lists, tables, diagrams, math, and
    more without remembering markdown syntax.
-4. **Link notes together.** Type `[[` to search for another note by name and
+4. **Use templates for recurring occasions.** Open the **Templates** section in the
+   sidebar and click **+ New Template** to create one — this opens a normal note
+   under the hood, so you write it the same way you'd write any other note (slash
+   commands, tables, everything). Two placeholders get filled in automatically
+   wherever they appear in the template's text: `{{title}}` becomes the name you
+   give the new note, and `{{date}}` becomes today's date. For example, a "Meeting"
+   template might start with `# {{title}} — {{date}}`.
+
+   Whenever you need one, click **New from Template** in the sidebar, pick the
+   template you want, and give the new note a name — Inkay creates it from the
+   template with the placeholders already filled in. Right-click a template in the
+   list to rename or delete it; clicking it normally opens it for editing so you
+   can keep refining it over time. (Templates are stored as regular markdown files
+   in a hidden `.templates` folder at the root of your vault, so they travel with
+   it and never show up in your note tree, search, or wiki-links.)
+5. **Link notes together.** Type `[[` to search for another note by name and
    insert a link to it; picking a name that doesn't exist yet creates that note.
    Clicking a wiki-link jumps straight to it.
-5. **Tag notes.** Add `#tagname` anywhere in a note's text. Open the **Tags**
+6. **Tag notes.** Add `#tagname` anywhere in a note's text. Open the **Tags**
    section in the sidebar to browse all tags in the vault and see which notes use
    a given one.
-6. **Find things.**
+7. **Find things.**
    - Type into the **Search notes…** box to filter by filename or note content
      (with a highlighted snippet of the match).
    - Press `Ctrl/Cmd+P` to open the quick switcher and jump to a note by name.
    - Use the **←** / **→** buttons (or `Alt+Left` / `Alt+Right`, or your mouse's
      back/forward side buttons) to retrace notes you've recently visited.
-7. **Organize.** Drag a file or folder onto another folder in the sidebar to move
+8. **Organize.** Drag a file or folder onto another folder in the sidebar to move
    it there. Right-click any entry to rename or delete it (deleted items go to the
    OS recycle bin/trash, not gone for good).
-8. **Save.** Inkay autosaves shortly after you stop typing; press `Ctrl/Cmd+S` any
+9. **Save.** Inkay autosaves shortly after you stop typing; press `Ctrl/Cmd+S` any
    time to save immediately. A small dot next to the filename means there are
    unsaved changes.
 

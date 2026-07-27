@@ -3,6 +3,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { PlainTextEditor } from "./components/PlainTextEditor";
 import { QuickSwitcher } from "./components/QuickSwitcher";
+import { TemplatePicker } from "./components/TemplatePicker";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { useResizableWidth } from "./hooks/useResizableWidth";
 import {
@@ -24,7 +25,11 @@ import {
   dirname,
   noteTitle,
   isPlainTextFile,
+  listTemplates,
+  createTemplate,
+  createNoteFromTemplate,
   type FileNode,
+  type TemplateInfo,
 } from "./lib/fs";
 import "./App.css";
 
@@ -49,7 +54,9 @@ function App() {
   const [savedContent, setSavedContent] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tagsByFile, setTagsByFile] = useState<Record<string, string[]>>({});
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   // Off by default: nspell has to parse ~6MB of English + Norwegian dictionary
   // data into memory the first time it loads, so notes that don't need it
   // shouldn't pay for it unasked.
@@ -160,7 +167,14 @@ function App() {
     setErrorMessage(null);
     localStorage.setItem(LAST_FOLDER_KEY, dir);
     setTagsByFile(await buildTagIndex(nodes));
+    setTemplates(await listTemplates(dir));
   }, []);
+
+  // Re-reads the template list after a create/delete/rename.
+  const refreshTemplates = useCallback(async () => {
+    if (!rootDir) return;
+    setTemplates(await listTemplates(rootDir));
+  }, [rootDir]);
 
   const openFile = useCallback(async (path: string) => {
     const text = await readNote(path);
@@ -293,6 +307,74 @@ function App() {
     setSelectedFolder(path);
   }
 
+  function handleNewFromTemplate() {
+    if (templates.length === 0) {
+      setErrorMessage("No templates yet — create one from the Templates section in the sidebar.");
+      return;
+    }
+    setTemplatePickerOpen(true);
+  }
+
+  async function handlePickTemplate(template: TemplateInfo) {
+    setTemplatePickerOpen(false);
+    const targetDir = selectedFolder ?? rootDir;
+    if (!rootDir || !targetDir) return;
+    const name = window.prompt("File name:", template.name);
+    if (!name) return;
+    try {
+      const templateContent = await readNote(template.path);
+      const path = await createNoteFromTemplate(targetDir, name, templateContent);
+      await refreshTree();
+      await handleSelectFile(path);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleNewTemplate() {
+    if (!rootDir) return;
+    const name = window.prompt("Template name:");
+    if (!name) return;
+    try {
+      const path = await createTemplate(rootDir, name);
+      await refreshTemplates();
+      await handleSelectFile(path);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleDeleteTemplate(path: string, _name: string) {
+    try {
+      await deleteEntry(path);
+      await refreshTemplates();
+      if (activeFile === path) {
+        setActiveFile(null);
+        setContent("");
+        setSavedContent("");
+        localStorage.removeItem(LAST_FILE_KEY);
+      }
+      setBackStack((prev) => prev.filter((p) => p !== path));
+      setForwardStack((prev) => prev.filter((p) => p !== path));
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function handleRenameTemplate(path: string, newName: string) {
+    try {
+      const newPath = await renameEntry(path, newName, false);
+      if (newPath === path) return;
+      await refreshTemplates();
+      if (activeFile === path) {
+        setActiveFile(newPath);
+        localStorage.setItem(LAST_FILE_KEY, newPath);
+      }
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleDelete(path: string, _isDirectory: boolean) {
     if (!rootDir) return;
     try {
@@ -404,6 +486,11 @@ function App() {
           onMoveEntry={handleMoveEntry}
           onRename={handleRename}
           tagsByFile={tagsByFile}
+          templates={templates}
+          onNewFromTemplate={handleNewFromTemplate}
+          onNewTemplate={handleNewTemplate}
+          onDeleteTemplate={handleDeleteTemplate}
+          onRenameTemplate={handleRenameTemplate}
         />
       )}
       <ResizeHandle
@@ -481,6 +568,13 @@ function App() {
             handleSelectFile(path);
           }}
           onClose={() => setQuickSwitcherOpen(false)}
+        />
+      )}
+      {templatePickerOpen && (
+        <TemplatePicker
+          templates={templates}
+          onPick={handlePickTemplate}
+          onClose={() => setTemplatePickerOpen(false)}
         />
       )}
     </div>

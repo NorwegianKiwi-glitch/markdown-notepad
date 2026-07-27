@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { basename, flattenFiles, type FileNode } from "../lib/fs";
+import { basename, flattenFiles, type FileNode, type TemplateInfo } from "../lib/fs";
 import { Search } from "./Search";
 import "./Sidebar.css";
 
@@ -9,6 +9,7 @@ interface ContextMenuState {
   path: string;
   name: string;
   isDirectory: boolean;
+  kind: "entry" | "template";
 }
 
 interface SidebarProps {
@@ -27,6 +28,11 @@ interface SidebarProps {
   onMoveEntry: (sourcePath: string, destDir: string) => void;
   onRename: (path: string, isDirectory: boolean, newName: string) => void;
   tagsByFile: Record<string, string[]>;
+  templates: TemplateInfo[];
+  onNewFromTemplate: () => void;
+  onNewTemplate: () => void;
+  onDeleteTemplate: (path: string, name: string) => void;
+  onRenameTemplate: (path: string, name: string) => void;
 }
 
 // True when `path` is `ancestor` itself or lives somewhere underneath it.
@@ -50,6 +56,11 @@ export function Sidebar({
   onMoveEntry,
   onRename,
   tagsByFile,
+  templates,
+  onNewFromTemplate,
+  onNewTemplate,
+  onDeleteTemplate,
+  onRenameTemplate,
 }: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [draggedPath, setDraggedPath] = useState<string | null>(null);
@@ -124,26 +135,53 @@ export function Sidebar({
   function handleContextMenu(event: React.MouseEvent, node: FileNode) {
     event.preventDefault();
     event.stopPropagation();
-    setContextMenu({ x: event.clientX, y: event.clientY, path: node.path, name: node.name, isDirectory: node.isDirectory });
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      path: node.path,
+      name: node.name,
+      isDirectory: node.isDirectory,
+      kind: "entry",
+    });
+  }
+
+  function handleTemplateContextMenu(event: React.MouseEvent, template: TemplateInfo) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      path: template.path,
+      name: template.name,
+      isDirectory: false,
+      kind: "template",
+    });
   }
 
   function handleDelete() {
     if (!contextMenu) return;
-    const kind = contextMenu.isDirectory ? "folder (and everything inside it)" : "file";
-    const proceed = window.confirm(`Move the ${kind} "${contextMenu.name}" to the recycle bin?`);
+    const { path, name, isDirectory, kind } = contextMenu;
     setContextMenu(null);
-    if (proceed) {
-      onDelete(contextMenu.path, contextMenu.isDirectory);
+    const label = kind === "template" ? "template" : isDirectory ? "folder (and everything inside it)" : "file";
+    if (!window.confirm(`Move the ${label} "${name}" to the recycle bin?`)) return;
+    if (kind === "template") {
+      onDeleteTemplate(path, name);
+    } else {
+      onDelete(path, isDirectory);
     }
   }
 
   function handleRename() {
     if (!contextMenu) return;
-    const { path, name, isDirectory } = contextMenu;
+    const { path, name, isDirectory, kind } = contextMenu;
     setContextMenu(null);
-    const newName = window.prompt(`Rename ${isDirectory ? "folder" : "file"}:`, name);
+    const newName = window.prompt(`Rename ${kind === "template" ? "template" : isDirectory ? "folder" : "file"}:`, name);
     if (!newName || newName === name) return;
-    onRename(path, isDirectory, newName);
+    if (kind === "template") {
+      onRenameTemplate(path, newName);
+    } else {
+      onRename(path, isDirectory, newName);
+    }
   }
 
   return (
@@ -153,7 +191,35 @@ export function Sidebar({
         <button type="button" onClick={onNewFile} disabled={!rootDir}>New File</button>
         <button type="button" onClick={onNewLectureNote} disabled={!rootDir}>New Lecture Note</button>
         <button type="button" onClick={onNewFolder} disabled={!rootDir}>New Folder</button>
+        <button type="button" onClick={onNewFromTemplate} disabled={!rootDir}>New from Template</button>
       </div>
+      {rootDir && (
+        <details className="templates-section">
+          <summary className="tags-summary">Templates</summary>
+          {templates.length === 0 ? (
+            <p className="template-empty">No templates yet.</p>
+          ) : (
+            <ul className="template-list">
+              {templates.map((template) => (
+                <li key={template.path}>
+                  <button
+                    type="button"
+                    className={template.path === activeFile ? "template-entry active" : "template-entry"}
+                    onClick={() => onSelectFile(template.path)}
+                    onContextMenu={(e) => handleTemplateContextMenu(e, template)}
+                    title="Edit this template"
+                  >
+                    {template.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="template-new" onClick={onNewTemplate}>
+            + New Template
+          </button>
+        </details>
+      )}
       {rootDir && allTags.length > 0 && (
         <details className="tags-section">
           <summary className="tags-summary">Tags</summary>
@@ -233,10 +299,10 @@ export function Sidebar({
       {contextMenu && (
         <div className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
           <button type="button" className="context-menu-item" onClick={handleRename}>
-            Rename {contextMenu.isDirectory ? "folder" : "file"}
+            Rename {contextMenu.kind === "template" ? "template" : contextMenu.isDirectory ? "folder" : "file"}
           </button>
           <button type="button" className="context-menu-item danger" onClick={handleDelete}>
-            Delete {contextMenu.isDirectory ? "folder" : "file"}
+            Delete {contextMenu.kind === "template" ? "template" : contextMenu.isDirectory ? "folder" : "file"}
           </button>
         </div>
       )}

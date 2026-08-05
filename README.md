@@ -1,4 +1,4 @@
-# Inkay
+# Inkay v2
 
 Inkay is a fast, local-first markdown notepad for Windows/macOS/Linux, built with
 [Tauri](https://tauri.app/) and React. Point it at a folder on disk and that folder

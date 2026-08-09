@@ -14,6 +14,7 @@ import { ImageWithNodeView } from "../tiptap/nodes/ImageNode";
 import { SlashCommand } from "../tiptap/slashCommand/SlashCommand";
 import { WikiLink } from "../tiptap/wikiLink/WikiLink";
 import { TableBubbleMenu } from "../tiptap/TableBubbleMenu";
+import { FormatBubbleMenu } from "../tiptap/FormatBubbleMenu";
 import { BlockSpacing } from "../tiptap/extensions/BlockSpacing";
 import { ImagePaste } from "../tiptap/extensions/ImagePaste";
 import { SpellCheck } from "../tiptap/extensions/SpellCheck";
@@ -150,6 +151,7 @@ export function Editor({
   return (
     <div className="editor-pane">
       {editor && <TableBubbleMenu editor={editor} />}
+      {editor && <FormatBubbleMenu editor={editor} />}
       <div className="editor-pane-body">
         <NoteDirProvider value={noteDir}>
           <EditorContent editor={editor} className="editor-content" />

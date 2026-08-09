@@ -191,21 +191,54 @@ function App() {
     if (!savedFolder) return;
     let cancelled = false;
     (async () => {
+      let folderExists: boolean;
       try {
-        if (!(await pathExists(savedFolder)) || cancelled) return;
-        await loadFolder(savedFolder);
-
-        const savedFile = localStorage.getItem(LAST_FILE_KEY);
-        if (
-          savedFile &&
-          isPathInside(savedFile, savedFolder) &&
-          (await pathExists(savedFile)) &&
-          !cancelled
-        ) {
-          await openFile(savedFile);
+        folderExists = await pathExists(savedFolder);
+      } catch (err) {
+        // A transient error (drive not mounted yet, permission hiccup, AV lock)
+        // doesn't mean the folder is gone — leave LAST_FOLDER_KEY alone so the
+        // next launch can retry instead of forgetting the vault forever.
+        if (!cancelled) {
+          console.error("Failed to check last folder", savedFolder, err);
+          setErrorMessage(
+            `Couldn't reopen your last folder: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
-      } catch {
+        return;
+      }
+      if (cancelled) return;
+      if (!folderExists) {
         localStorage.removeItem(LAST_FOLDER_KEY);
+        localStorage.removeItem(LAST_FILE_KEY);
+        return;
+      }
+
+      try {
+        await loadFolder(savedFolder);
+      } catch (err) {
+        if (!cancelled) {
+          console.error("Failed to load last folder", savedFolder, err);
+          setErrorMessage(
+            `Couldn't reopen your last folder: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        return;
+      }
+      if (cancelled) return;
+
+      const savedFile = localStorage.getItem(LAST_FILE_KEY);
+      if (!savedFile || !isPathInside(savedFile, savedFolder)) return;
+      try {
+        const fileExists = await pathExists(savedFile);
+        if (cancelled) return;
+        if (!fileExists) {
+          localStorage.removeItem(LAST_FILE_KEY);
+          return;
+        }
+        await openFile(savedFile);
+      } catch (err) {
+        // A file-restore failure shouldn't cost us the folder we already loaded.
+        if (!cancelled) console.error("Failed to reopen last file", savedFile, err);
       }
     })();
     return () => {

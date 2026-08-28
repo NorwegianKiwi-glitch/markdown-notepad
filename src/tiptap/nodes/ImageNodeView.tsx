@@ -17,20 +17,29 @@ export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProp
   const width = node.attrs.title ? Number(node.attrs.title) : undefined;
 
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const frameRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setLoadError(false);
 
     if (EXTERNAL_SRC.test(rawSrc) || !noteDir) {
       setResolvedSrc(EXTERNAL_SRC.test(rawSrc) ? rawSrc : null);
       return;
     }
 
-    join(noteDir, rawSrc).then((absolute) => {
-      if (!cancelled) setResolvedSrc(convertFileSrc(absolute));
-    });
+    join(noteDir, rawSrc)
+      .then((absolute) => {
+        if (!cancelled) setResolvedSrc(convertFileSrc(absolute));
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error("Failed to resolve image path", { rawSrc, noteDir }, err);
+          setLoadError(true);
+        }
+      });
 
     return () => {
       cancelled = true;
@@ -69,17 +78,27 @@ export function ImageNodeView({ node, selected, updateAttributes }: NodeViewProp
 
   return (
     <NodeViewWrapper as="div" className={selected ? "image-node selected" : "image-node"}>
-      {resolvedSrc ? (
+      {resolvedSrc && !loadError ? (
         <span
           ref={frameRef}
           className={isResizing ? "image-frame resizing" : "image-frame"}
           style={width ? { width } : undefined}
         >
-          <img src={resolvedSrc} alt={alt} onDoubleClick={() => updateAttributes({ title: null })} />
+          <img
+            src={resolvedSrc}
+            alt={alt}
+            onDoubleClick={() => updateAttributes({ title: null })}
+            onError={(event) => {
+              console.error("Image failed to load", { rawSrc, noteDir, resolvedSrc: event.currentTarget.src });
+              setLoadError(true);
+            }}
+          />
           {selected && <span className="image-resize-handle" onPointerDown={handleResizeStart} />}
         </span>
       ) : (
-        <span className="image-placeholder">Loading image…</span>
+        <span className="image-placeholder">
+          {loadError ? `Image not found: ${rawSrc}` : "Loading image…"}
+        </span>
       )}
     </NodeViewWrapper>
   );

@@ -271,7 +271,7 @@ export async function buildTagIndex(nodes: FileNode[]): Promise<Record<string, s
   return Object.fromEntries(entries);
 }
 
-export async function saveImage(noteDir: string, file: File): Promise<string> {
+export async function saveImage(noteDir: string, file: Blob): Promise<string> {
   const assetsDir = await join(noteDir, "assets");
   if (!(await exists(assetsDir))) {
     await mkdir(assetsDir);

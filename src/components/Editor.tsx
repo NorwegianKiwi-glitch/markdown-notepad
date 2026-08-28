@@ -41,6 +41,59 @@ interface HeadingItem {
 
 const markedInstance = createMarkedInstance();
 
+// On some platforms the clipboard doesn't expose pasted screenshot data as a
+// plain `image/*` DataTransferItem, so ImagePaste's handlePaste never fires
+// and the browser's own paste handling inserts an <img src="blob:..."> (or
+// occasionally a data: URL) straight into the doc instead. Those URLs only
+// resolve for the lifetime of the current webview session, so the image
+// silently goes dark the next time the note is opened. This sweeps the doc
+// for any such node and persists it to disk the same way a normal paste
+// would, rewriting its src to the resulting relative path.
+const UNSAVED_IMAGE_SRC = /^(blob:|data:)/i;
+
+async function persistUnsavedImages(editor: TiptapEditor, noteDir: string, inFlight: Set<string>) {
+  const pendingSrcs = new Set<string>();
+  editor.state.doc.descendants((node) => {
+    const src = node.attrs.src as string | undefined;
+    if (node.type.name === "image" && src && UNSAVED_IMAGE_SRC.test(src)) {
+      pendingSrcs.add(src);
+    }
+  });
+
+  for (const src of pendingSrcs) {
+    if (inFlight.has(src)) continue;
+    inFlight.add(src);
+    persistOneUnsavedImage(editor, noteDir, src).finally(() => inFlight.delete(src));
+  }
+}
+
+async function persistOneUnsavedImage(editor: TiptapEditor, noteDir: string, src: string) {
+  try {
+    const blob = await (await fetch(src)).blob();
+    const relativePath = await saveImage(noteDir, blob);
+
+    // Re-locate the node by src instead of trusting a position captured
+    // before these awaits: the doc may have changed underneath us.
+    let targetPos: number | null = null;
+    editor.state.doc.descendants((node, pos) => {
+      if (targetPos === null && node.type.name === "image" && node.attrs.src === src) {
+        targetPos = pos;
+      }
+    });
+    if (targetPos === null) return;
+
+    const node = editor.state.doc.nodeAt(targetPos);
+    if (!node) return;
+    editor.view.dispatch(
+      editor.state.tr.setNodeMarkup(targetPos, undefined, { ...node.attrs, src: relativePath }),
+    );
+
+    if (src.startsWith("blob:")) URL.revokeObjectURL(src);
+  } catch (err) {
+    console.error("Failed to persist pasted image to disk", src, err);
+  }
+}
+
 function getMarkdown(editor: TiptapEditor): string {
   return (editor as unknown as { getMarkdown: () => string }).getMarkdown();
 }
@@ -70,6 +123,7 @@ export function Editor({
   noteNamesRef.current = noteNames;
   const onNavigateToNoteRef = useRef(onNavigateToNote);
   onNavigateToNoteRef.current = onNavigateToNote;
+  const unsavedImagesInFlight = useRef<Set<string>>(new Set());
   const [headings, setHeadings] = useState<HeadingItem[]>([]);
   const outlineResize = useResizableWidth({
     defaultWidth: 200,
@@ -123,12 +177,16 @@ export function Editor({
       lastEmitted.current = markdown;
       onChange(markdown);
       setHeadings(getHeadings(editor));
+      const dir = noteDirRef.current;
+      if (dir) persistUnsavedImages(editor, dir, unsavedImagesInFlight.current);
     },
   });
 
   useEffect(() => {
     if (!editor) return;
     setHeadings(getHeadings(editor));
+    const dir = noteDirRef.current;
+    if (dir) persistUnsavedImages(editor, dir, unsavedImagesInFlight.current);
   }, [editor]);
 
   useEffect(() => {
@@ -137,6 +195,8 @@ export function Editor({
       lastEmitted.current = value;
       editor.commands.setContent(value, { contentType: "markdown" });
       setHeadings(getHeadings(editor));
+      const dir = noteDirRef.current;
+      if (dir) persistUnsavedImages(editor, dir, unsavedImagesInFlight.current);
     }
   }, [value, editor]);
 

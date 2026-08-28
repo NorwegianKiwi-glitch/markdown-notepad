@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Sidebar } from "./components/Sidebar";
 import { Editor } from "./components/Editor";
 import { PlainTextEditor } from "./components/PlainTextEditor";
@@ -153,6 +154,28 @@ function App() {
     const timeout = setTimeout(handleSave, AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timeout);
   }, [content, isDirty, handleSave]);
+
+  // The debounce above still leaves a gap: closing the window within
+  // AUTOSAVE_DELAY_MS of the last edit (e.g. paste an image, then quit) would
+  // previously discard that edit since nothing flushed it first. Intercept
+  // the close request, save, then let it through.
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let closing = false;
+    const appWindow = getCurrentWindow();
+    appWindow
+      .onCloseRequested(async (event) => {
+        if (closing) return;
+        event.preventDefault();
+        closing = true;
+        await handleSave();
+        await appWindow.destroy();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+    return () => unlisten?.();
+  }, [handleSave]);
 
   const loadFolder = useCallback(async (dir: string) => {
     const nodes = await readMarkdownTree(dir);
